@@ -9,7 +9,7 @@ CORS(app)
 
 # Dynamically locate model file in deployment
 MODEL_FILENAME = "pcos_model.pkl"
-model_path = os.path.join(os.getcwd(), MODEL_FILENAME)  # FIX: Using os.getcwd() instead
+model_path = os.path.join(os.getcwd(), MODEL_FILENAME)
 
 if not os.path.exists(model_path):
     print(f"❌ ERROR: Model file not found at {model_path}")
@@ -35,7 +35,7 @@ treatment_guidelines = {
 
 @app.route("/")
 def home():
-    return jsonify({"message": "Flask PCOS Prediction API is Running!"})  # FIX: JSON response
+    return jsonify({"message": "Flask PCOS Prediction API is Running!"})
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -52,7 +52,6 @@ def predict():
         # Convert input data to float values
         try:
             input_features = [float(data.get(feature, 0)) for feature in expected_features]
-
         except ValueError:
             return jsonify({"error": "Invalid input types. All values must be numeric"}), 400
 
@@ -73,18 +72,21 @@ def predict():
             if str(data.get(symptom, "0")).lower() in ["1", "true"]
         ]
 
+        # Convert list to string to avoid Android parsing issue
+        recommendations_str = ", ".join(recommendations)
+
         response = {
             "PCOS_Prediction": prediction,
             "Confidence": round(prob, 2),
-            "Treatment_Recommendations": recommendations if prediction == 1 else "No treatment needed"
+            "Treatment_Recommendations": recommendations_str if prediction == 1 else "No treatment needed"
         }
 
         return jsonify(response)
-    
+
     except Exception as e:
         print(f"❌ ERROR in /predict: {e}")
         return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # FIX: Render uses port 10000
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
