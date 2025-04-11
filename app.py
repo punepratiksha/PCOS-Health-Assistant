@@ -2,10 +2,9 @@ from flask import Flask, request, jsonify
 import numpy as np
 import pickle
 
-# Initialize the Flask app
 app = Flask(__name__)
 
-# Load your trained model
+# Load the trained model
 model = pickle.load(open('pcos_model.pkl', 'rb'))
 
 # Define expected input features
@@ -18,7 +17,17 @@ treatment_guidelines = {
     "hair_fall": "Take biotin supplements, Consult a trichologist, Use gentle hair care products"
 }
 
-# Your route and prediction function (no changes needed here)
+# Add a default route to check server status
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({"message": "PCOS Prediction API is up. Use POST /predict to get results."})
+
+# Optional ping route to keep service warm or test health
+@app.route("/ping", methods=["GET"])
+def ping():
+    return "pong", 200
+
+# Prediction route
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
@@ -26,10 +35,12 @@ def predict():
         if not data:
             return jsonify({"error": "No input data provided"}), 400
 
+        # Check for missing features
         missing_features = [feature for feature in expected_features if feature not in data]
         if missing_features:
             return jsonify({"error": f"Missing required features: {missing_features}"}), 400
 
+        # Convert input features to float
         try:
             input_features = [float(data.get(feature, 0)) for feature in expected_features]
         except ValueError:
@@ -44,6 +55,7 @@ def predict():
         proba = model.predict_proba(input_array)[0][prediction]
         confidence = round(proba, 2)
 
+        # Treatment recommendations
         if prediction == 1:
             recommendations = [
                 f"• {line}" for symptom in expected_features[4:]
@@ -64,6 +76,7 @@ def predict():
                 "• Go for routine health checkups to monitor hormonal levels."
             ]
 
+        # Prepare the response
         response = {
             "PCOS_Prediction": int(prediction),
             "Confidence": confidence,
@@ -76,6 +89,6 @@ def predict():
         print(f"❌ ERROR in /predict: {e}")
         return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
 
-# Required to run app locally or via WSGI like gunicorn
+# For local or Render run
 if __name__ == '__main__':
     app.run(debug=True)
