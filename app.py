@@ -7,26 +7,29 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Dynamically locate model file in deployment
+# Load model
 MODEL_FILENAME = "pcos_model.pkl"
-model_path = os.path.join(os.getcwd(), MODEL_FILENAME)  # FIX: Using os.getcwd() instead
+model_path = os.path.join(os.getcwd(), MODEL_FILENAME)
 
 if not os.path.exists(model_path):
-    print(f"❌ ERROR: Model file not found at {model_path}")
-    raise FileNotFoundError(f"Model file not found at {model_path}")
+    raise FileNotFoundError(f"❌ Model not found at {model_path}")
 
-try:
-    print("✅ Loading model...")
-    model = joblib.load(model_path)
-    print("✅ Model loaded successfully!")
-except Exception as e:
-    print(f"❌ ERROR loading model: {e}")
-    raise RuntimeError(f"Error loading model: {e}")
+model = joblib.load(model_path)
 
-# Define expected features
-expected_features = ["age", "bmi", "fsh", "lh", "irregular_periods", "acne", "hair_fall"]
+# Map API input keys to actual model feature order
+feature_map = {
+    "age": "Age (yrs)",
+    "bmi": "BMI",
+    "fsh": "FSH(mIU/mL)",
+    "lh": "LH(mIU/mL)",
+    "irregular_periods": "irregular_periods",
+    "acne": "Pimples(Y/N)",
+    "hair_fall": "Hair loss(Y/N)"
+}
 
-# Treatment recommendations
+expected_features = list(feature_map.keys())
+
+# Treatment recommendation map
 treatment_guidelines = {
     "irregular_periods": "Lifestyle changes, Hormone therapy, Regular exercise",
     "acne": "Topical retinoids, Oral contraceptives, Dermatologist consultation",
@@ -35,56 +38,47 @@ treatment_guidelines = {
 
 @app.route("/")
 def home():
-    return jsonify({"message": "Flask PCOS Prediction API is Running!"})  # FIX: JSON response
+    return jsonify({"message": "Flask PCOS Prediction API is Running!"})
 
-@app.route('/predict', methods=['POST'])
+@app.route("/predict", methods=["POST"])
 def predict():
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({"error": "No input data provided"}), 400
 
-        # Check for missing features
-        missing_features = [feature for feature in expected_features if feature not in data]
-        if missing_features:
-            return jsonify({"error": f"Missing required features: {missing_features}"}), 400
+        # Validate inputs
+        missing = [f for f in expected_features if f not in data]
+        if missing:
+            return jsonify({"error": f"Missing input(s): {missing}"}), 400
 
-        # Convert input data to float values
+        # Build input array in correct order for the model
         try:
-            input_features = [float(data.get(feature, 0)) for feature in expected_features]
-
+            input_values = [
+                float(data.get(key)) for key in expected_features
+            ]
         except ValueError:
-            return jsonify({"error": "Invalid input types. All values must be numeric"}), 400
+            return jsonify({"error": "Invalid input types. Must be numeric."}), 400
 
-        input_array = np.array(input_features).reshape(1, -1)
+        input_array = np.array(input_values).reshape(1, -1)
 
-        # Ensure model has probability prediction capability
-        if not hasattr(model, "predict_proba"):
-            return jsonify({"error": "Model does not support probability prediction"}), 500
-
-        # Get prediction probability
+        # Prediction with probability
         prob = model.predict_proba(input_array)[0][1]
         prediction = 1 if prob > 0.45 else 0
 
-        # Get treatment recommendations
-        recommendations = [
-            treatment_guidelines[symptom]
-            for symptom in expected_features[4:]
-            if str(data.get(symptom, "0")).lower() in ["1", "true"]
-        ]
+        # Treatment logic
+        recommendations = []
+        for symptom in ["irregular_periods", "acne", "hair_fall"]:
+            if str(data.get(symptom)) in ["1", "true", "True"]:
+                recommendations.append(treatment_guidelines[symptom])
 
-        response = {
+        return jsonify({
             "PCOS_Prediction": prediction,
             "Confidence": round(prob, 2),
-            "Treatment_Recommendations": recommendations if prediction == 1 else "No treatment needed"
-        }
+            "Treatment_Recommendations": recommendations if prediction else "No treatment needed"
+        })
 
-        return jsonify(response)
-    
     except Exception as e:
-        print(f"❌ ERROR in /predict: {e}")
         return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # FIX: Render uses port 10000
-    app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
