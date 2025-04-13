@@ -7,7 +7,6 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Load model
 MODEL_FILENAME = "pcos_model.pkl"
 model_path = os.path.join(os.getcwd(), MODEL_FILENAME)
 
@@ -16,7 +15,7 @@ if not os.path.exists(model_path):
 
 model = joblib.load(model_path)
 
-# Map API input keys to actual model feature order
+# Mapping from API input to model-trained feature names
 feature_map = {
     "age": "Age (yrs)",
     "bmi": "BMI",
@@ -27,9 +26,10 @@ feature_map = {
     "hair_fall": "Hair loss(Y/N)"
 }
 
-expected_features = list(feature_map.keys())
+# Features expected by the model in this order
+model_features_order = list(feature_map.values())
 
-# Treatment recommendation map
+# Treatment recommendations
 treatment_guidelines = {
     "irregular_periods": "Lifestyle changes, Hormone therapy, Regular exercise",
     "acne": "Topical retinoids, Oral contraceptives, Dermatologist consultation",
@@ -45,38 +45,45 @@ def predict():
     try:
         data = request.get_json()
 
-        # Validate inputs
-        missing = [f for f in expected_features if f not in data]
+        # Check for missing inputs
+        missing = [key for key in feature_map if key not in data]
         if missing:
             return jsonify({"error": f"Missing input(s): {missing}"}), 400
 
-        # Build input array in correct order for the model
+        # Build input for the model in correct order
         try:
             input_values = [
-                float(data.get(key)) for key in expected_features
+                float(data.get(api_key)) for api_key in feature_map
             ]
         except ValueError:
             return jsonify({"error": "Invalid input types. Must be numeric."}), 400
 
         input_array = np.array(input_values).reshape(1, -1)
 
-        # Prediction with probability
+        # Predict and get confidence
         prob = model.predict_proba(input_array)[0][1]
-        prediction = 1 if prob > 0.45 else 0
+        prediction = int(prob > 0.45)
+        confidence = round(prob, 2)
 
-        # Treatment logic
+        # Build recommendations
         recommendations = []
         for symptom in ["irregular_periods", "acne", "hair_fall"]:
-            if str(data.get(symptom)) in ["1", "true", "True"]:
+            if str(data.get(symptom)).lower() in ["1", "true"]:
                 recommendations.append(treatment_guidelines[symptom])
 
         return jsonify({
             "PCOS_Prediction": prediction,
-            "Confidence": round(prob, 2),
-            "Treatment_Recommendations": recommendations if prediction else "No treatment needed"
+            "Confidence": confidence,
+            "Treatment_Recommendations": recommendations if prediction else [
+                "Maintain a balanced diet to reduce hormonal imbalances.",
+                "Exercise regularly to stay healthy and manage weight.",
+                "Manage stress through yoga, meditation, or counseling.",
+                "Go for routine health checkups to monitor hormonal levels."
+            ]
         })
 
     except Exception as e:
+        print(f"❌ ERROR in /predict: {e}")
         return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
 
 if __name__ == "__main__":
