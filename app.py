@@ -3,10 +3,12 @@ from flask_cors import CORS
 import joblib
 import numpy as np
 import os
+import pandas as pd
 
 app = Flask(__name__)
 CORS(app)
 
+# Load model
 MODEL_FILENAME = "pcos_model.pkl"
 model_path = os.path.join(os.getcwd(), MODEL_FILENAME)
 
@@ -26,10 +28,10 @@ feature_map = {
     "hair_fall": "Hair loss(Y/N)"
 }
 
-# Features expected by the model in this order
-model_features_order = list(feature_map.values())
+# Expected model feature order
+model_features = list(feature_map.values())
 
-# Treatment recommendations
+# Treatment guidelines
 treatment_guidelines = {
     "irregular_periods": "Lifestyle changes, Hormone therapy, Regular exercise",
     "acne": "Topical retinoids, Oral contraceptives, Dermatologist consultation",
@@ -50,36 +52,33 @@ def predict():
         if missing:
             return jsonify({"error": f"Missing input(s): {missing}"}), 400
 
-        # Build input for the model in correct order
-        try:
-            input_values = [
-                float(data.get(api_key)) for api_key in feature_map
-            ]
-        except ValueError:
-            return jsonify({"error": "Invalid input types. Must be numeric."}), 400
+        # Convert inputs into DataFrame with model's original column names
+        model_input = {feature_map[key]: [float(data[key])] for key in feature_map}
+        input_df = pd.DataFrame(model_input)
 
-        input_array = np.array(input_values).reshape(1, -1)
-
-        # Predict and get confidence
-        prob = model.predict_proba(input_array)[0][1]
+        # Predict using model
+        prob = model.predict_proba(input_df)[0][1]  # PCOS probability
         prediction = int(prob > 0.45)
         confidence = round(prob, 2)
 
-        # Build recommendations
+        # Treatment recommendations
         recommendations = []
         for symptom in ["irregular_periods", "acne", "hair_fall"]:
             if str(data.get(symptom)).lower() in ["1", "true"]:
                 recommendations.append(treatment_guidelines[symptom])
 
-        return jsonify({
-            "PCOS_Prediction": prediction,
-            "Confidence": confidence,
-            "Treatment_Recommendations": recommendations if prediction else [
+        if prediction == 0:
+            recommendations = [
                 "Maintain a balanced diet to reduce hormonal imbalances.",
                 "Exercise regularly to stay healthy and manage weight.",
                 "Manage stress through yoga, meditation, or counseling.",
                 "Go for routine health checkups to monitor hormonal levels."
             ]
+
+        return jsonify({
+            "PCOS_Prediction": prediction,
+            "Confidence": confidence,
+            "Treatment_Recommendations": recommendations
         })
 
     except Exception as e:
