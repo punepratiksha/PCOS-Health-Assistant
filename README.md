@@ -2,6 +2,13 @@
 
 A smart, AI-powered Android application that predicts **Polycystic Ovary Syndrome (PCOS)** based on health inputs and symptoms. The app is backed by a machine learning model and provides personalized treatment recommendations to raise awareness and assist in early diagnosis.
 
+## ❓ Problem & Solution
+
+🩸 **Problem:** Millions of women suffer from PCOS without early diagnosis due to low awareness and limited access to healthcare, especially in rural areas.  
+🌈 **Solution:** Swasthya Sakhi – a smart, accessible mobile assistant that uses AI to identify early signs of PCOS and guide users with helpful medical insights and lifestyle suggestions.
+
+---
+
 ## 🚀 Features
 
 - 🤖 **PCOS Prediction** using trained ML model
